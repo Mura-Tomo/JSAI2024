@@ -1,28 +1,27 @@
 import torch
 import gc
 import wandb
-import os
 import numpy as np
 from tqdm.auto import tqdm
 
-from transformers import AutoTokenizer, TrainingArguments, AutoModelForCausalLM
+from transformers import AutoTokenizer, AutoModelForCausalLM
 from transformers import pipeline
 from datasets import Dataset, load_dataset
-from peft import LoraConfig, PeftModel, PeftConfig, prepare_model_for_kbit_training, get_peft_model
-from trl import PPOTrainer, PPOConfig, AutoModelForCausalLMWithValueHead, create_reference_model
-from trl.core import LengthSampler, respond_to_batch
+from peft import LoraConfig, PeftConfig, prepare_model_for_kbit_training, get_peft_model
+from trl import PPOTrainer, PPOConfig, AutoModelForCausalLMWithValueHead
+from trl.core import LengthSampler
 
 class CFG:
-    EXP_NAME = "honoka_ppo_0323"
+    EXP_NAME = ""
     
     SEQ_LEN = 128
 
     REWARD_BASELINE = -20
     
     RM_BASE = "cyberagent/open-calm-small"
-    RM_OUTPUT_DIR = "honoka_rm_0323/final_checkpoint"
-    SFT_OUTPUT_DIR = "honoka_0307/final_checkpoint"
-    SFT_MERGED_OUTPUT_DIR = "honoka_0307_merged"
+    RM_OUTPUT_DIR = ""
+    SFT_OUTPUT_DIR = ""
+    SFT_MERGED_OUTPUT_DIR = ""
     
     OUTPUT_DIR = f"./{EXP_NAME}"
     
@@ -86,13 +85,10 @@ sent_kwargs = {
     "truncation": True,
 }
 
-# dataset = load_dataset('csv', data_files='./serif_correct/serif_train.csv')
-# dataset = dataset["train"].filter(lambda example: example["makihara"] == 1)
-dataset = load_dataset('csv', data_files='question100_correct.csv')
+dataset = load_dataset('csv', data_files='')
 dataset = dataset["train"]
 train_df = dataset.to_pandas()
 texts = train_df["serif"].to_list()
-# texts = [t[:5] for t in texts]  
 dset = Dataset.from_dict({"query": texts})
 dset = dset.map(lambda sample: ppo_tokenizer(sample['query'], truncation=True))
 dset
@@ -141,8 +137,6 @@ for ite, batch in tqdm(enumerate(ppo_trainer.dataloader), total=len(ppo_trainer.
         print("stop")
         break
     
-    # generation_kwargs["min_new_tokens"] = int(min[ite])
-    # generation_kwargs["max_new_tokens"] = 32
     query_tensors = [torch.tensor(i).to(f"cuda:{ppo_model.current_device}") for i in batch["input_ids"]]
 
     ppo_model.gradient_checkpointing_disable()
@@ -151,10 +145,6 @@ for ite, batch in tqdm(enumerate(ppo_trainer.dataloader), total=len(ppo_trainer.
     response_tensors = ppo_trainer.generate(
         query_tensors, return_prompt=False, length_sampler=output_length_sampler, **generation_kwargs
     )
-    # response_tensors = ppo_trainer.generate(
-    #     query_tensors, return_prompt=False, **generation_kwargs
-    # )
-    # print(response_tensors)
 
     if torch.sum(response_tensors[0]) == 0:
         print(ite)
@@ -164,27 +154,20 @@ for ite, batch in tqdm(enumerate(ppo_trainer.dataloader), total=len(ppo_trainer.
 
     # Compute sentiment score
     texts = [q + r for q, r in zip(batch["query"], batch["response"])]
-    print('----texts----')
-    print(texts)
 
     pipe_outputs = sentiment_pipe(texts, **sent_kwargs)
     
     rewards = [torch.tensor(output[0]["score"] - CFG.REWARD_BASELINE) for output in pipe_outputs]
-    print('----reward----')
-    print(rewards)
 
     ppo_model.gradient_checkpointing_enable()
     ppo_model.pretrained_model.config.use_cache = False
     
     stats = ppo_trainer.step(query_tensors, response_tensors, rewards)
     stats['ppo/policy/ratio'] = [0]
-    print(stats['objective/kl'])
     if stats['objective/kl'] > 50 or stats['objective/kl'] < -50:
         print("stop")
         break
     ppo_trainer.log_stats(stats, batch, rewards)
-
-    # ppo_trainer.save_pretrained(f"{CFG.OUTPUT_DIR}/checkpoint-{ite}")
     
     if ite > 1 and (ite + 1) % 20 == 0:
         ppo_trainer.save_pretrained(f"{CFG.OUTPUT_DIR}/checkpoint-{ite}")

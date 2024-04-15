@@ -7,7 +7,7 @@ from trl import SFTTrainer
 from trl.trainer import ConstantLengthDataset
 
 class CFG:
-    EXP_NAME = "honoka_0307"
+    EXP_NAME = ""
     
     SEQ_LEN = 128
     MODEL_NAME = "cyberagent/open-calm-3b"
@@ -20,18 +20,12 @@ class CFG:
     
     OUTPUT_DIR = f"./{EXP_NAME}"
 
-dataset = load_dataset('csv', data_files='honoka_merged.csv')
-# positive_train = dataset["train"].filter(lambda example: example["oda"] == 1)
-# dataset = load_dataset('csv', data_files='serif_correct/serif_valid.csv')
-# positive_valid = dataset["train"].filter(lambda example: example["oda"] == 1)
+dataset = load_dataset('csv', data_files='')
 positive_train = dataset["train"].filter(lambda example: example["label"] == 0)
 positive_valid = dataset["train"].filter(lambda example: example["label"] == 1)
-print(positive_train)
-print(positive_valid)
 
 def prepare_sample_text(example):
     return example["sentence"]
-    # return example["serif"]
 
 def chars_token_ratio(dataset, tokenizer, nb_examples=400):
     total_characters, total_tokens = 0, 0

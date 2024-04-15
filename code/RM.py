@@ -1,12 +1,11 @@
 import pandas as pd
 import numpy as np
-from tqdm.auto import tqdm
 from transformers import DataCollatorWithPadding
 from transformers import AutoTokenizer, TrainingArguments, AutoModelForSequenceClassification, Trainer
-from datasets import Dataset, load_dataset, load_metric
+from datasets import load_dataset, load_metric
 
 class CFG:
-    EXP_NAME = "honoka_rm_0323"
+    EXP_NAME = ""
     
     SEQ_LEN = 128
     MODEL_NAME = "cyberagent/open-calm-small"
@@ -21,9 +20,6 @@ tokenizer = AutoTokenizer.from_pretrained(CFG.MODEL_NAME)
 model = AutoModelForSequenceClassification.from_pretrained(CFG.MODEL_NAME, num_labels=2)
 model.config.pad_token_id = tokenizer.eos_token_id
 
-# dataset = load_dataset("shunk031/JGLUE", name="MARC-ja")
-dataset = load_dataset('csv', data_files='honoka_sl_train_0307.csv')
-
 data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
 
 def preprocess_function(batch):
@@ -31,16 +27,11 @@ def preprocess_function(batch):
     tokenized_batch['labels'] = batch['label']
     return tokenized_batch
 
+dataset = load_dataset('csv', data_files='')
 train_dataset = dataset["train"].map(preprocess_function, batched=True)
-print(train_dataset)
 
-# valid_df = pd.DataFrame(dataset["validation"])
-# nega_df = valid_df.query("label==1").head(250)
-# posi_df = valid_df.query("label==0").sample(len(nega_df), random_state=0)
-# valid_dataset = Dataset.from_pandas(pd.concat([nega_df, posi_df])).map(preprocess_function, batched=True)
-dataset = load_dataset('csv', data_files='honoka_sl_valid_0307.csv')
+dataset = load_dataset('csv', data_files='')
 valid_dataset = dataset["train"].map(preprocess_function, batched=True)
-print(valid_dataset)
 
 load_accuracy = load_metric("accuracy")
 load_f1 = load_metric("f1")
